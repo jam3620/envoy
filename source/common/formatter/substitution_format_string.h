@@ -66,7 +66,8 @@ public:
     switch (config.format_case()) {
     case envoy::config::core::v3::SubstitutionFormatString::FormatCase::kTextFormat:
       return std::make_unique<FormatterBaseImpl<FormatterContext>>(
-          config.text_format(), config.omit_empty_values(), *commands);
+          config.text_format(), config.omit_empty_values(), config.default_empty_value(),
+          *commands);
     case envoy::config::core::v3::SubstitutionFormatString::FormatCase::kJsonFormat:
       return createJsonFormatter<FormatterContext>(
           config.json_format(), true, config.omit_empty_values(),
@@ -77,7 +78,8 @@ public:
                                                            context.serverFactoryContext().api());
       RETURN_IF_NOT_OK(data_source_or_error.status());
       return std::make_unique<FormatterBaseImpl<FormatterContext>>(
-          *data_source_or_error, config.omit_empty_values(), *commands);
+          *data_source_or_error, config.omit_empty_values(), config.default_empty_value(),
+          *commands);
     }
     case envoy::config::core::v3::SubstitutionFormatString::FormatCase::FORMAT_NOT_SET:
       PANIC_DUE_TO_PROTO_UNSET;

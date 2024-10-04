@@ -213,15 +213,20 @@ template <class FormatterContext> class FormatterBaseImpl : public FormatterBase
 public:
   using CommandParsers = std::vector<CommandParserBasePtr<FormatterContext>>;
 
-  FormatterBaseImpl(absl::string_view format, bool omit_empty_values = false)
-      : empty_value_string_(omit_empty_values ? absl::string_view{}
-                                              : DefaultUnspecifiedValueStringView) {
+  FormatterBaseImpl(absl::string_view format, bool omit_empty_values = false,
+                    const std::string& empty_value = std::string())
+      : empty_value_string_(
+            omit_empty_values
+                ? absl::string_view{}
+                : (empty_value.empty() ? DefaultUnspecifiedValueStringView : empty_value)) {
     providers_ = SubstitutionFormatParser::parse<FormatterContext>(format);
   }
   FormatterBaseImpl(absl::string_view format, bool omit_empty_values,
-                    const CommandParsers& command_parsers)
-      : empty_value_string_(omit_empty_values ? absl::string_view{}
-                                              : DefaultUnspecifiedValueStringView) {
+                    const std::string& empty_value, const CommandParsers& command_parsers)
+      : empty_value_string_(
+            omit_empty_values
+                ? absl::string_view{}
+                : (empty_value.empty() ? DefaultUnspecifiedValueStringView : empty_value)) {
     providers_ = SubstitutionFormatParser::parse<FormatterContext>(format, command_parsers);
   }
 
@@ -499,7 +504,9 @@ private:
 using JsonFormatterImpl = JsonFormatterImplBase<HttpFormatterContext>;
 
 // Helper classes for StructFormatter::StructFormatMapVisitor.
-template <class... Ts> struct StructFormatMapVisitorHelper : Ts... { using Ts::operator()...; };
+template <class... Ts> struct StructFormatMapVisitorHelper : Ts... {
+  using Ts::operator()...;
+};
 template <class... Ts> StructFormatMapVisitorHelper(Ts...) -> StructFormatMapVisitorHelper<Ts...>;
 
 /**

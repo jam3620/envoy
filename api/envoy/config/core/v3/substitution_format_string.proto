@@ -122,4 +122,8 @@ message SubstitutionFormatString {
 
   // If json_format is used, the options will be applied to the output JSON string.
   JsonFormatOptions json_format_options = 7;
+
+  // Default value for empty values.  This value is only used if ``omit_empty_values`` is
+  // false.
+  string default_empty_value = 8;
 }
