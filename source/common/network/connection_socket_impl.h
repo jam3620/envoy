@@ -74,6 +74,11 @@ public:
   }
   absl::string_view ja3Hash() const override { return connectionInfoProvider().ja3Hash(); }
 
+  void setJA3NHash(absl::string_view ja3n_hash) override {
+    connectionInfoProvider().setJA3NHash(ja3n_hash);
+  }
+  absl::string_view ja3nHash() const override { return connectionInfoProvider().ja3nHash(); }
+
   absl::optional<std::chrono::milliseconds> lastRoundTripTime() override {
     return ioHandle().lastRoundTripTime();
   }

@@ -57,6 +57,7 @@ public:
   const TlsInspectorStats& stats() const { return stats_; }
   bssl::UniquePtr<SSL> newSsl();
   bool enableJA3Fingerprinting() const { return enable_ja3_fingerprinting_; }
+  bool enableJA3NFingerprinting() const { return enable_ja3n_fingerprinting_; }
   uint32_t maxClientHelloSize() const { return max_client_hello_size_; }
   uint32_t initialReadBufferSize() const { return initial_read_buffer_size_; }
 
@@ -68,6 +69,7 @@ private:
   TlsInspectorStats stats_;
   bssl::UniquePtr<SSL_CTX> ssl_ctx_;
   const bool enable_ja3_fingerprinting_;
+  const bool enable_ja3n_fingerprinting_;
   const uint32_t max_client_hello_size_;
   const uint32_t initial_read_buffer_size_;
 };

@@ -54,6 +54,8 @@ Config::Config(
       ssl_ctx_(SSL_CTX_new(TLS_with_buffers_method())),
       enable_ja3_fingerprinting_(
           PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, enable_ja3_fingerprinting, false)),
+      enable_ja3n_fingerprinting_(
+          PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, enable_ja3n_fingerprinting, false)),
       max_client_hello_size_(max_client_hello_size),
       initial_read_buffer_size_(
           std::min(PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, initial_read_buffer_size,
@@ -255,12 +257,14 @@ void writeCipherSuites(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fi
   }
 }
 
-void writeExtensions(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fingerprint) {
+void writeExtensions(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fingerprint,
+                     bool sort = false) {
   CBS extensions;
   CBS_init(&extensions, ssl_client_hello->extensions, ssl_client_hello->extensions_len);
 
   bool write_extension = true;
   bool first = true;
+  std::vector<uint16_t> sorted_extensions;
   while (write_extension && CBS_len(&extensions) > 0) {
     uint16_t id;
     CBS extension;
@@ -268,6 +272,22 @@ void writeExtensions(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fing
     write_extension =
         (CBS_get_u16(&extensions, &id) && CBS_get_u16_length_prefixed(&extensions, &extension));
     if (write_extension && isNotGrease(id)) {
+      if (sort) {
+        sorted_extensions.emplace_back(id);
+        continue;
+      }
+
+      if (!first) {
+        absl::StrAppend(&fingerprint, "-");
+      }
+      absl::StrAppendFormat(&fingerprint, "%d", id);
+      first = false;
+    }
+  }
+
+  if (sort) {
+    std::sort(sorted_extensions.begin(), sorted_extensions.end());
+    for (const uint16_t id : sorted_extensions) {
       if (!first) {
         absl::StrAppend(&fingerprint, "-");
       }
@@ -331,26 +351,51 @@ void writeEllipticCurvePointFormats(const SSL_CLIENT_HELLO* ssl_client_hello,
 }
 
 void Filter::createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello) {
+  if (!config_->enableJA3Fingerprinting() && !config_->enableJA3NFingerprinting()) {
+    return;
+  }
+
+  // TLSVersion,Ciphers,
+  std::string fingerprint_front;
+  const uint16_t client_version = ssl_client_hello->version;
+  absl::StrAppendFormat(&fingerprint_front, "%d,", client_version);
+  writeCipherSuites(ssl_client_hello, fingerprint_front);
+  absl::StrAppend(&fingerprint_front, ",");
+
+  // EllipticCurves,EllipticCurvePointFormats
+  std::string fingerprint_back;
+  writeEllipticCurves(ssl_client_hello, fingerprint_back);
+  absl::StrAppend(&fingerprint_back, ",");
+  writeEllipticCurvePointFormats(ssl_client_hello, fingerprint_back);
+
+  // JA3 - unsorted Extensions
   if (config_->enableJA3Fingerprinting()) {
-    std::string fingerprint;
-    const uint16_t client_version = ssl_client_hello->version;
-    absl::StrAppendFormat(&fingerprint, "%d,", client_version);
-    writeCipherSuites(ssl_client_hello, fingerprint);
-    absl::StrAppend(&fingerprint, ",");
+    std::string fingerprint(fingerprint_front);
     writeExtensions(ssl_client_hello, fingerprint);
     absl::StrAppend(&fingerprint, ",");
-    writeEllipticCurves(ssl_client_hello, fingerprint);
-    absl::StrAppend(&fingerprint, ",");
-    writeEllipticCurvePointFormats(ssl_client_hello, fingerprint);
+    absl::StrAppend(&fingerprint, fingerprint_back);
 
-    ENVOY_LOG(trace, "tls:createJA3Hash(), fingerprint: {}", fingerprint);
-
+    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3 fingerprint: {}", fingerprint);
     uint8_t buf[MD5_DIGEST_LENGTH];
     MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
     std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
-    ENVOY_LOG(trace, "tls:createJA3Hash(), hash: {}", md5);
-
+    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3 hash: {}", md5);
     cb_->socket().setJA3Hash(md5);
+  }
+
+  // JA3N - sorted Extensions
+  if (config_->enableJA3NFingerprinting()) {
+    std::string fingerprint(fingerprint_front);
+    writeExtensions(ssl_client_hello, fingerprint, true);
+    absl::StrAppend(&fingerprint, ",");
+    absl::StrAppend(&fingerprint, fingerprint_back);
+
+    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3N fingerprint: {}", fingerprint);
+    uint8_t buf[MD5_DIGEST_LENGTH];
+    MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
+    std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
+    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3N hash: {}", md5);
+    cb_->socket().setJA3NHash(md5);
   }
 }
 

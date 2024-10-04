@@ -441,6 +441,9 @@ message TLSProperties {
 
   // The ``JA3`` fingerprint when ``JA3`` fingerprinting is enabled.
   string ja3_fingerprint = 7;
+
+  // The ``JA3N`` fingerprint when ``JA3N`` fingerprinting is enabled.
+  string ja3n_fingerprint = 8;
 }
 
 // [#next-free-field: 16]

@@ -32,4 +32,7 @@ message TlsInspector {
   // tls inspector will consume.
   google.protobuf.UInt32Value initial_read_buffer_size = 2
       [(validate.rules).uint32 = {lt: 65537 gt: 255}];
+
+  // Populate ``JA3N`` fingerprint hash using data from the TLS Client Hello packet. Default is false.
+  google.protobuf.BoolValue enable_ja3n_fingerprinting = 3;
 }

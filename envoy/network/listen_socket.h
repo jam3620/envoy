@@ -64,9 +64,19 @@ public:
   virtual void setJA3Hash(absl::string_view ja3_hash) PURE;
 
   /**
+   * @param ja3nHash Connection ja3n fingerprint hash of the downstream connection.
+   */
+  virtual void setJA3NHash(absl::string_view ja3n_hash) PURE;
+
+  /**
    * @return Connection ja3 fingerprint hash of the downstream connection, if any.
    */
   virtual absl::string_view ja3Hash() const PURE;
+
+  /**
+   * @return Connection ja3n fingerprint hash of the downstream connection, if any.
+   */
+  virtual absl::string_view ja3nHash() const PURE;
 
   /**
    *  @return absl::optional<std::chrono::milliseconds> An optional of the most recent round-trip
