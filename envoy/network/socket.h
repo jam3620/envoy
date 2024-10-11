@@ -9,6 +9,7 @@
 #include "envoy/common/pure.h"
 #include "envoy/config/core/v3/base.pb.h"
 #include "envoy/network/address.h"
+#include "envoy/network/fingerprint.h"
 #include "envoy/network/io_handle.h"
 #include "envoy/ssl/connection.h"
 
@@ -254,16 +255,6 @@ public:
   virtual Ssl::ConnectionInfoConstSharedPtr sslConnection() const PURE;
 
   /**
-   * @return ja3 fingerprint hash of the downstream connection, if any.
-   */
-  virtual absl::string_view ja3Hash() const PURE;
-
-  /**
-   * @return ja3n fingerprint hash of the downstream connection, if any.
-   */
-  virtual absl::string_view ja3nHash() const PURE;
-
-  /**
    * @return roundTripTime of the connection
    */
   virtual const absl::optional<std::chrono::milliseconds>& roundTripTime() const PURE;
@@ -277,6 +268,12 @@ public:
    * @return the listener info backing this socket.
    */
   virtual OptRef<const ListenerInfo> listenerInfo() const PURE;
+
+  /**
+   * @param fingerprint the fingerprint type to get.
+   * @return the fingerprint value, if any.
+   */
+  virtual absl::string_view fingerprint(Fingerprint fingerprint) const PURE;
 };
 
 class ConnectionInfoSetter : public ConnectionInfoProvider {
@@ -335,16 +332,6 @@ public:
   virtual void setSslConnection(const Ssl::ConnectionInfoConstSharedPtr& ssl_connection_info) PURE;
 
   /**
-   * @param JA3 fingerprint.
-   */
-  virtual void setJA3Hash(const absl::string_view ja3_hash) PURE;
-
-  /**
-   * @param JA3N fingerprint.
-   */
-  virtual void setJA3NHash(const absl::string_view ja3n_hash) PURE;
-
-  /**
    * @param  milliseconds of round trip time of previous connection
    */
   virtual void setRoundTripTime(std::chrono::milliseconds round_trip_time) PURE;
@@ -358,6 +345,12 @@ public:
    * @param listener_info the listener info provider backing this socket.
    */
   virtual void setListenerInfo(std::shared_ptr<const ListenerInfo> listener_info) PURE;
+
+  /**
+   * @param fingerprint the fingerprint type.
+   * @param value the fingerprint value.
+   */
+  virtual void setFingerprint(const Fingerprint fingerprint, const absl::string_view value) PURE;
 };
 
 using ConnectionInfoSetterSharedPtr = std::shared_ptr<ConnectionInfoSetter>;

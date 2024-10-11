@@ -18,6 +18,12 @@ option (udpa.annotations.file_status).package_version_status = ACTIVE;
 // Allows detecting whether the transport appears to be TLS or plaintext.
 // [#extension: envoy.filters.listener.tls_inspector]
 
+enum Fingerprinting {
+  JA3 = 0;
+  JA3N = 1;
+  JA4 = 2;
+}
+
 message TlsInspector {
   option (udpa.annotations.versioning).previous_message_type =
       "envoy.config.filter.listener.tls_inspector.v2.TlsInspector";
@@ -33,6 +39,7 @@ message TlsInspector {
   google.protobuf.UInt32Value initial_read_buffer_size = 2
       [(validate.rules).uint32 = {lt: 65537 gt: 255}];
 
-  // Populate ``JA3N`` fingerprint hash using data from the TLS Client Hello packet. Default is false.
-  google.protobuf.BoolValue enable_ja3n_fingerprinting = 3;
+  // Populate fingerprints of the TLS Client Hello packet.  Supported fingerprints are
+  // ``JA3``, ``JA3N`` and ``JA4``.
+  repeated Fingerprinting fingerprinting = 3;
 }

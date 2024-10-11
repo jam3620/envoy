@@ -154,6 +154,7 @@ envoy_cc_library(
     hdrs = ["socket.h"],
     deps = [
         ":address_interface",
+        ":fingerprint",
         ":io_handle_interface",
         "//envoy/ssl:connection_interface",
         "@envoy_api//envoy/config/core/v3:pkg_cc_proto",
@@ -253,4 +254,9 @@ envoy_cc_library(
     deps = [
         ":address_interface",
     ],
+)
+
+envoy_cc_library(
+    name = "fingerprint",
+    hdrs = ["fingerprint.h"],
 )

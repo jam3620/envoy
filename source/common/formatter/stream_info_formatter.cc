@@ -1647,8 +1647,11 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
               return std::make_unique<StreamInfoStringFormatterProvider>(
                   [](const StreamInfo::StreamInfo& stream_info) {
                     absl::optional<std::string> result;
-                    if (!stream_info.downstreamAddressProvider().ja3Hash().empty()) {
-                      result = std::string(stream_info.downstreamAddressProvider().ja3Hash());
+                    if (!stream_info.downstreamAddressProvider()
+                             .fingerprint(Network::Fingerprint::JA3)
+                             .empty()) {
+                      result = std::string(stream_info.downstreamAddressProvider().fingerprint(
+                          Network::Fingerprint::JA3));
                     }
                     return result;
                   });
@@ -1659,8 +1662,11 @@ const StreamInfoFormatterProviderLookupTable& getKnownStreamInfoFormatterProvide
               return std::make_unique<StreamInfoStringFormatterProvider>(
                   [](const StreamInfo::StreamInfo& stream_info) {
                     absl::optional<std::string> result;
-                    if (!stream_info.downstreamAddressProvider().ja3nHash().empty()) {
-                      result = std::string(stream_info.downstreamAddressProvider().ja3nHash());
+                    if (!stream_info.downstreamAddressProvider()
+                             .fingerprint(Network::Fingerprint::JA3N)
+                             .empty()) {
+                      result = std::string(stream_info.downstreamAddressProvider().fingerprint(
+                          Network::Fingerprint::JA3N));
                     }
                     return result;
                   });

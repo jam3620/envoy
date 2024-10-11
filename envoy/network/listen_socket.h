@@ -59,26 +59,6 @@ public:
   virtual absl::string_view requestedServerName() const PURE;
 
   /**
-   * @param ja3Hash Connection ja3 fingerprint hash of the downstream connection.
-   */
-  virtual void setJA3Hash(absl::string_view ja3_hash) PURE;
-
-  /**
-   * @param ja3nHash Connection ja3n fingerprint hash of the downstream connection.
-   */
-  virtual void setJA3NHash(absl::string_view ja3n_hash) PURE;
-
-  /**
-   * @return Connection ja3 fingerprint hash of the downstream connection, if any.
-   */
-  virtual absl::string_view ja3Hash() const PURE;
-
-  /**
-   * @return Connection ja3n fingerprint hash of the downstream connection, if any.
-   */
-  virtual absl::string_view ja3nHash() const PURE;
-
-  /**
    *  @return absl::optional<std::chrono::milliseconds> An optional of the most recent round-trip
    *  time of the connection. If the platform does not support this, then an empty optional is
    *  returned.
@@ -102,6 +82,18 @@ public:
    * @param indent_level how far to indent, for pretty-printed classes and subclasses.
    */
   virtual void dumpState(std::ostream& os, int indent_level = 0) const PURE;
+
+  /**
+   * @param fingerprint the fingerprint type to set.
+   * @param value the fingerprint value.
+   */
+  virtual void setFingerprint(Fingerprint fingerprint, absl::string_view value) PURE;
+
+  /**
+   * @param fingerprint the fingerprint type to get.
+   * @return the fingerprint value, if any.
+   */
+  virtual absl::string_view fingerprint(Fingerprint fingerprint) const PURE;
 };
 
 using ConnectionSocketPtr = std::unique_ptr<ConnectionSocket>;

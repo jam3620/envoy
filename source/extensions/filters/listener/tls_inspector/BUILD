@@ -21,6 +21,7 @@ envoy_cc_library(
         "//envoy/event:dispatcher_interface",
         "//envoy/event:timer_interface",
         "//envoy/network:filter_interface",
+        "//envoy/network:fingerprint",
         "//envoy/network:listen_socket_interface",
         "//source/common/api:os_sys_calls_lib",
         "//source/common/buffer:buffer_lib",

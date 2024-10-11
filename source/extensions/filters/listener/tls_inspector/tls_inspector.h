@@ -4,6 +4,7 @@
 #include "envoy/event/timer.h"
 #include "envoy/extensions/filters/listener/tls_inspector/v3/tls_inspector.pb.h"
 #include "envoy/network/filter.h"
+#include "envoy/network/fingerprint.h"
 #include "envoy/stats/histogram.h"
 #include "envoy/stats/scope.h"
 #include "envoy/stats/stats_macros.h"
@@ -45,6 +46,7 @@ enum class ParseState {
   // Parser reports unrecoverable error.
   Error
 };
+
 /**
  * Global configuration for TLS inspector.
  */
@@ -56,8 +58,18 @@ public:
 
   const TlsInspectorStats& stats() const { return stats_; }
   bssl::UniquePtr<SSL> newSsl();
-  bool enableJA3Fingerprinting() const { return enable_ja3_fingerprinting_; }
-  bool enableJA3NFingerprinting() const { return enable_ja3n_fingerprinting_; }
+  void enableFingerprint(Network::Fingerprint f) {
+    if (f >= Network::Fingerprint::NumFingerprints) {
+      return;
+    }
+    fingerprints_[static_cast<std::underlying_type_t<Network::Fingerprint>>(f)] = true;
+  }
+  bool fingerprintEnabled(Network::Fingerprint f) const {
+    if (f >= Network::Fingerprint::NumFingerprints) {
+      return false;
+    }
+    return fingerprints_[static_cast<std::underlying_type_t<Network::Fingerprint>>(f)];
+  }
   uint32_t maxClientHelloSize() const { return max_client_hello_size_; }
   uint32_t initialReadBufferSize() const { return initial_read_buffer_size_; }
 
@@ -68,8 +80,9 @@ public:
 private:
   TlsInspectorStats stats_;
   bssl::UniquePtr<SSL_CTX> ssl_ctx_;
-  const bool enable_ja3_fingerprinting_;
-  const bool enable_ja3n_fingerprinting_;
+  std::array<bool, static_cast<std::underlying_type_t<Network::Fingerprint>>(
+                       Network::Fingerprint::NumFingerprints)>
+      fingerprints_;
   const uint32_t max_client_hello_size_;
   const uint32_t initial_read_buffer_size_;
 };

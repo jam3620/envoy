@@ -611,11 +611,8 @@ public:
        << DUMP_MEMBER_AS(directRemoteAddress(), directRemoteAddress()->asStringView())
        << DUMP_MEMBER_AS(localAddress(), localAddress()->asStringView()) << "\n";
   }
-  absl::string_view ja3Hash() const override {
-    return StreamInfoImpl::downstreamAddressProvider().ja3Hash();
-  }
-  absl::string_view ja3nHash() const override {
-    return StreamInfoImpl::downstreamAddressProvider().ja3nHash();
+  absl::string_view fingerprint(Network::Fingerprint fingerprint) const override {
+    return StreamInfoImpl::downstreamAddressProvider().fingerprint(fingerprint);
   }
   const absl::optional<std::chrono::milliseconds>& roundTripTime() const override {
     return StreamInfoImpl::downstreamAddressProvider().roundTripTime();

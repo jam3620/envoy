@@ -52,10 +52,6 @@ Config::Config(
     : stats_{ALL_TLS_INSPECTOR_STATS(POOL_COUNTER_PREFIX(scope, "tls_inspector."),
                                      POOL_HISTOGRAM_PREFIX(scope, "tls_inspector."))},
       ssl_ctx_(SSL_CTX_new(TLS_with_buffers_method())),
-      enable_ja3_fingerprinting_(
-          PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, enable_ja3_fingerprinting, false)),
-      enable_ja3n_fingerprinting_(
-          PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, enable_ja3n_fingerprinting, false)),
       max_client_hello_size_(max_client_hello_size),
       initial_read_buffer_size_(
           std::min(PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, initial_read_buffer_size,
@@ -64,6 +60,24 @@ Config::Config(
   if (max_client_hello_size_ > TLS_MAX_CLIENT_HELLO) {
     throw EnvoyException(fmt::format("max_client_hello_size of {} is greater than maximum of {}.",
                                      max_client_hello_size_, size_t(TLS_MAX_CLIENT_HELLO)));
+  }
+
+  std::fill(fingerprints_.begin(), fingerprints_.end(), false);
+  if (PROTOBUF_GET_WRAPPED_OR_DEFAULT(proto_config, enable_ja3_fingerprinting, false)) {
+    enableFingerprint(Envoy::Network::Fingerprint::JA3);
+  }
+  for (const auto fingerprint : proto_config.fingerprinting()) {
+    switch (fingerprint) {
+    case envoy::extensions::filters::listener::tls_inspector::v3::Fingerprinting::JA3:
+      enableFingerprint(Envoy::Network::Fingerprint::JA3);
+      break;
+    case envoy::extensions::filters::listener::tls_inspector::v3::Fingerprinting::JA3N:
+      enableFingerprint(Envoy::Network::Fingerprint::JA3N);
+      break;
+    case envoy::extensions::filters::listener::tls_inspector::v3::Fingerprinting::JA4:
+      enableFingerprint(Envoy::Network::Fingerprint::JA4);
+      break;
+    }
   }
 
   SSL_CTX_set_min_proto_version(ssl_ctx_.get(), TLS_MIN_SUPPORTED_VERSION);
@@ -351,7 +365,8 @@ void writeEllipticCurvePointFormats(const SSL_CLIENT_HELLO* ssl_client_hello,
 }
 
 void Filter::createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello) {
-  if (!config_->enableJA3Fingerprinting() && !config_->enableJA3NFingerprinting()) {
+  if (!config_->fingerprintEnabled(Network::Fingerprint::JA3) &&
+      !config_->fingerprintEnabled(Network::Fingerprint::JA3N)) {
     return;
   }
 
@@ -369,7 +384,7 @@ void Filter::createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello) {
   writeEllipticCurvePointFormats(ssl_client_hello, fingerprint_back);
 
   // JA3 - unsorted Extensions
-  if (config_->enableJA3Fingerprinting()) {
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA3)) {
     std::string fingerprint(fingerprint_front);
     writeExtensions(ssl_client_hello, fingerprint);
     absl::StrAppend(&fingerprint, ",");
@@ -380,11 +395,11 @@ void Filter::createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello) {
     MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
     std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
     ENVOY_LOG(trace, "tls:createJA3Hash(), JA3 hash: {}", md5);
-    cb_->socket().setJA3Hash(md5);
+    cb_->socket().setFingerprint(Network::Fingerprint::JA3, md5);
   }
 
   // JA3N - sorted Extensions
-  if (config_->enableJA3NFingerprinting()) {
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA3N)) {
     std::string fingerprint(fingerprint_front);
     writeExtensions(ssl_client_hello, fingerprint, true);
     absl::StrAppend(&fingerprint, ",");
@@ -395,7 +410,7 @@ void Filter::createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello) {
     MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
     std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
     ENVOY_LOG(trace, "tls:createJA3Hash(), JA3N hash: {}", md5);
-    cb_->socket().setJA3NHash(md5);
+    cb_->socket().setFingerprint(Network::Fingerprint::JA3N, md5);
   }
 }
 

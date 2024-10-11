@@ -69,15 +69,12 @@ public:
     return connectionInfoProvider().requestedServerName();
   }
 
-  void setJA3Hash(absl::string_view ja3_hash) override {
-    connectionInfoProvider().setJA3Hash(ja3_hash);
+  void setFingerprint(Fingerprint fingerprint, absl::string_view value) override {
+    connectionInfoProvider().setFingerprint(fingerprint, value);
   }
-  absl::string_view ja3Hash() const override { return connectionInfoProvider().ja3Hash(); }
-
-  void setJA3NHash(absl::string_view ja3n_hash) override {
-    connectionInfoProvider().setJA3NHash(ja3n_hash);
+  absl::string_view fingerprint(Fingerprint fingerprint) const override {
+    return connectionInfoProvider().fingerprint(fingerprint);
   }
-  absl::string_view ja3nHash() const override { return connectionInfoProvider().ja3nHash(); }
 
   absl::optional<std::chrono::milliseconds> lastRoundTripTime() override {
     return ioHandle().lastRoundTripTime();

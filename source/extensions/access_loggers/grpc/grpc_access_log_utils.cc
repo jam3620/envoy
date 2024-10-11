@@ -184,13 +184,17 @@ void Utility::extractCommonAccessLogProperties(
         MessageUtil::sanitizeUtf8String(
             stream_info.downstreamAddressProvider().requestedServerName()));
   }
-  if (!stream_info.downstreamAddressProvider().ja3Hash().empty()) {
-    common_access_log.mutable_tls_properties()->set_ja3_fingerprint(
-        std::string(stream_info.downstreamAddressProvider().ja3Hash()));
+  if (!stream_info.downstreamAddressProvider().fingerprint(Network::Fingerprint::JA3).empty()) {
+    common_access_log.mutable_tls_properties()->set_ja3_fingerprint(std::string(
+        stream_info.downstreamAddressProvider().fingerprint(Network::Fingerprint::JA3)));
   }
-  if (!stream_info.downstreamAddressProvider().ja3nHash().empty()) {
-    common_access_log.mutable_tls_properties()->set_ja3n_fingerprint(
-        std::string(stream_info.downstreamAddressProvider().ja3nHash()));
+  if (!stream_info.downstreamAddressProvider().fingerprint(Network::Fingerprint::JA3N).empty()) {
+    common_access_log.mutable_tls_properties()->set_ja3n_fingerprint(std::string(
+        stream_info.downstreamAddressProvider().fingerprint(Network::Fingerprint::JA3N)));
+  }
+  if (!stream_info.downstreamAddressProvider().fingerprint(Network::Fingerprint::JA4).empty()) {
+    common_access_log.mutable_tls_properties()->set_ja4_fingerprint(std::string(
+        stream_info.downstreamAddressProvider().fingerprint(Network::Fingerprint::JA4)));
   }
   if (stream_info.downstreamAddressProvider().sslConnection() != nullptr) {
     auto* tls_properties = common_access_log.mutable_tls_properties();
