@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -87,7 +88,6 @@ Config::Config(
   SSL_CTX_set_select_certificate_cb(
       ssl_ctx_.get(), [](const SSL_CLIENT_HELLO* client_hello) -> ssl_select_cert_result_t {
         Filter* filter = static_cast<Filter*>(SSL_get_app_data(client_hello->ssl));
-        filter->createJA3Hash(client_hello);
 
         const uint8_t* data;
         size_t len;
@@ -95,6 +95,8 @@ Config::Config(
                 client_hello, TLSEXT_TYPE_application_layer_protocol_negotiation, &data, &len)) {
           filter->onALPN(data, len);
         }
+
+        filter->createFingerprints(client_hello);
         return ssl_select_cert_success;
       });
   SSL_CTX_set_tlsext_servername_callback(
@@ -252,32 +254,29 @@ bool isNotGrease(uint16_t id) {
   return std::find(GREASE.begin(), GREASE.end(), id) == GREASE.end();
 }
 
-void writeCipherSuites(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fingerprint) {
+void writeCipherSuites(const SSL_CLIENT_HELLO* ssl_client_hello,
+                       std::vector<std::function<void(uint16_t)>> callbacks) {
   CBS cipher_suites;
   CBS_init(&cipher_suites, ssl_client_hello->cipher_suites, ssl_client_hello->cipher_suites_len);
 
   bool write_cipher = true;
-  bool first = true;
   while (write_cipher && CBS_len(&cipher_suites) > 0) {
     uint16_t id;
     write_cipher = CBS_get_u16(&cipher_suites, &id);
     if (write_cipher && isNotGrease(id)) {
-      if (!first) {
-        absl::StrAppend(&fingerprint, "-");
+      for (const auto& cb : callbacks) {
+        cb(id);
       }
-      absl::StrAppendFormat(&fingerprint, "%d", id);
-      first = false;
     }
   }
 }
 
-void writeExtensions(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fingerprint,
-                     bool sort = false) {
+void writeExtensions(const SSL_CLIENT_HELLO* ssl_client_hello,
+                     std::vector<std::function<void(uint16_t)>> callbacks) {
   CBS extensions;
   CBS_init(&extensions, ssl_client_hello->extensions, ssl_client_hello->extensions_len);
 
   bool write_extension = true;
-  bool first = true;
   std::vector<uint16_t> sorted_extensions;
   while (write_extension && CBS_len(&extensions) > 0) {
     uint16_t id;
@@ -286,27 +285,9 @@ void writeExtensions(const SSL_CLIENT_HELLO* ssl_client_hello, std::string& fing
     write_extension =
         (CBS_get_u16(&extensions, &id) && CBS_get_u16_length_prefixed(&extensions, &extension));
     if (write_extension && isNotGrease(id)) {
-      if (sort) {
-        sorted_extensions.emplace_back(id);
-        continue;
+      for (const auto& cb : callbacks) {
+        cb(id);
       }
-
-      if (!first) {
-        absl::StrAppend(&fingerprint, "-");
-      }
-      absl::StrAppendFormat(&fingerprint, "%d", id);
-      first = false;
-    }
-  }
-
-  if (sort) {
-    std::sort(sorted_extensions.begin(), sorted_extensions.end());
-    for (const uint16_t id : sorted_extensions) {
-      if (!first) {
-        absl::StrAppend(&fingerprint, "-");
-      }
-      absl::StrAppendFormat(&fingerprint, "%d", id);
-      first = false;
     }
   }
 }
@@ -364,53 +345,138 @@ void writeEllipticCurvePointFormats(const SSL_CLIENT_HELLO* ssl_client_hello,
   }
 }
 
-void Filter::createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello) {
+void Filter::setFingerprint(Network::Fingerprint type, const std::string& fingerprint) {
+  ENVOY_LOG(trace, "tls:setFingerprint(), type enum: {}, fingerprint: {}", type, fingerprint);
+  uint8_t buf[MD5_DIGEST_LENGTH];
+  MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
+  std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
+  ENVOY_LOG(trace, "tls:setFingerprint(), type enum: {}, hash: {}", type, md5);
+  cb_->socket().setFingerprint(type, md5);
+}
+
+void Filter::createFingerprints(const SSL_CLIENT_HELLO* ssl_client_hello) {
   if (!config_->fingerprintEnabled(Network::Fingerprint::JA3) &&
-      !config_->fingerprintEnabled(Network::Fingerprint::JA3N)) {
+      !config_->fingerprintEnabled(Network::Fingerprint::JA3N) &&
+      !config_->fingerprintEnabled(Network::Fingerprint::JA4)) {
     return;
   }
 
-  // TLSVersion,Ciphers,
-  std::string fingerprint_front;
-  const uint16_t client_version = ssl_client_hello->version;
-  absl::StrAppendFormat(&fingerprint_front, "%d,", client_version);
-  writeCipherSuites(ssl_client_hello, fingerprint_front);
-  absl::StrAppend(&fingerprint_front, ",");
+  std::string ja3_fingerprint_front;
+  std::string ja3_fingerprint_back;
 
-  // EllipticCurves,EllipticCurvePointFormats
-  std::string fingerprint_back;
-  writeEllipticCurves(ssl_client_hello, fingerprint_back);
-  absl::StrAppend(&fingerprint_back, ",");
-  writeEllipticCurvePointFormats(ssl_client_hello, fingerprint_back);
+  // Create common parts of JA3 and JA3N
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA3) ||
+      config_->fingerprintEnabled(Network::Fingerprint::JA3N)) {
+
+    absl::StrAppendFormat(&ja3_fingerprint_front, "%d,", ssl_client_hello->version);
+    // writeCipherSuites(ssl_client_hello, ja3_fingerprint_front);
+    // absl::StrAppend(&ja3_fingerprint_front, ",");
+
+    writeEllipticCurves(ssl_client_hello, ja3_fingerprint_back);
+    absl::StrAppend(&ja3_fingerprint_back, ",");
+    writeEllipticCurvePointFormats(ssl_client_hello, ja3_fingerprint_back);
+  }
+
+  // Ciphers
+  //   JA3: as-is (no sorting)
+  //   JA3N: as-is (no sorting)
+  //   JA4: sorted
+  bool first = true;
+  std::vector<uint16_t> sorted_ciphers;
+  std::vector<std::function<void(uint16_t)>> ciphers_callbacks;
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA3) ||
+      config_->fingerprintEnabled(Network::Fingerprint::JA3N)) {
+    ciphers_callbacks.emplace_back([&](uint16_t id) {
+      if (!first) {
+        absl::StrAppend(&ja3_fingerprint_front, "-");
+      }
+      absl::StrAppendFormat(&ja3_fingerprint_front, "%d", id);
+      first = false;
+    });
+  }
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA4)) {
+    ciphers_callbacks.emplace_back([&](uint16_t id) { sorted_ciphers.emplace_back(id); });
+  }
+  writeCipherSuites(ssl_client_hello, ciphers_callbacks);
+  absl::StrAppend(&ja3_fingerprint_front, ",");
+  std::sort(sorted_ciphers.begin(), sorted_ciphers.end());
+
+  // Extensions
+  //   JA3: as-is (no sorting)
+  //   JA3N: sorted
+  //   JA4: sorted
+  std::string extensions;
+  first = true;
+  std::vector<uint16_t> sorted_extensions;
+  std::vector<std::function<void(uint16_t)>> extensions_callbacks;
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA3)) {
+    extensions_callbacks.emplace_back([&](uint16_t id) {
+      if (!first) {
+        absl::StrAppend(&extensions, "-");
+      }
+      absl::StrAppendFormat(&extensions, "%d", id);
+      first = false;
+    });
+  }
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA3N) ||
+      config_->fingerprintEnabled(Network::Fingerprint::JA4)) {
+    extensions_callbacks.emplace_back([&](uint16_t id) { sorted_extensions.emplace_back(id); });
+  }
+  writeExtensions(ssl_client_hello, extensions_callbacks);
+  std::sort(sorted_extensions.begin(), sorted_extensions.end());
 
   // JA3 - unsorted Extensions
   if (config_->fingerprintEnabled(Network::Fingerprint::JA3)) {
-    std::string fingerprint(fingerprint_front);
-    writeExtensions(ssl_client_hello, fingerprint);
+    std::string fingerprint(ja3_fingerprint_front);
+    absl::StrAppend(&fingerprint, extensions);
     absl::StrAppend(&fingerprint, ",");
-    absl::StrAppend(&fingerprint, fingerprint_back);
-
-    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3 fingerprint: {}", fingerprint);
+    absl::StrAppend(&fingerprint, ja3_fingerprint_back);
+    setFingerprint(Network::Fingerprint::JA3, fingerprint);
+    /*
+    ENVOY_LOG(trace, "tls:createFingerprints(), JA3 fingerprint: {}", fingerprint);
     uint8_t buf[MD5_DIGEST_LENGTH];
     MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
     std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
-    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3 hash: {}", md5);
+    ENVOY_LOG(trace, "tls:createFingerprints(), JA3 hash: {}", md5);
     cb_->socket().setFingerprint(Network::Fingerprint::JA3, md5);
+    */
   }
 
   // JA3N - sorted Extensions
   if (config_->fingerprintEnabled(Network::Fingerprint::JA3N)) {
-    std::string fingerprint(fingerprint_front);
-    writeExtensions(ssl_client_hello, fingerprint, true);
+    std::string fingerprint(ja3_fingerprint_front);
+    bool first = true;
+    for (const auto& id : sorted_extensions) {
+      if (!first) {
+        absl::StrAppend(&fingerprint, "-");
+      }
+      absl::StrAppendFormat(&fingerprint, "%d", id);
+      first = false;
+    }
     absl::StrAppend(&fingerprint, ",");
-    absl::StrAppend(&fingerprint, fingerprint_back);
+    absl::StrAppend(&fingerprint, ja3_fingerprint_back);
+    setFingerprint(Network::Fingerprint::JA3, fingerprint);
 
-    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3N fingerprint: {}", fingerprint);
+    /*
+    ENVOY_LOG(trace, "tls:createFingerprints(), JA3N fingerprint: {}", fingerprint);
     uint8_t buf[MD5_DIGEST_LENGTH];
     MD5(reinterpret_cast<const uint8_t*>(fingerprint.data()), fingerprint.size(), buf);
     std::string md5 = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
-    ENVOY_LOG(trace, "tls:createJA3Hash(), JA3N hash: {}", md5);
+    ENVOY_LOG(trace, "tls:createFingerprints(), JA3N hash: {}", md5);
     cb_->socket().setFingerprint(Network::Fingerprint::JA3N, md5);
+    */
+  }
+
+  // JA4
+  if (config_->fingerprintEnabled(Network::Fingerprint::JA4)) {
+    // JA4 format: https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md
+    std::string fingerprint;
+    if (cb_->socket()->socketType() == Network::Socket::Type::Stream) {
+      absl::StrAppend(&fingerprint, "t");
+    } else {
+      absl::StrAppend(&fingerprint, "q");
+    }
+    switch (cb_->socket()->socketType()) { Network::Socket::Type::Stream: }
   }
 }
 

@@ -106,7 +106,8 @@ private:
   ParseState onRead();
   void onALPN(const unsigned char* data, unsigned int len);
   void onServername(absl::string_view name);
-  void createJA3Hash(const SSL_CLIENT_HELLO* ssl_client_hello);
+  void setFingerprint(Network::Fingerprint type, const std::string& fingerprint);
+  void createFingerprints(const SSL_CLIENT_HELLO* ssl_client_hello);
   uint32_t maxConfigReadBytes() const { return config_->maxClientHelloSize(); }
 
   ConfigSharedPtr config_;

@@ -47,12 +47,6 @@ void FakeConnectionSocket::setRequestedServerName(absl::string_view server_name)
 
 absl::string_view FakeConnectionSocket::requestedServerName() const { return server_name_; }
 
-void FakeConnectionSocket::setJA3Hash(absl::string_view ja3_hash) {
-  ja3_hash_ = std::string(ja3_hash);
-}
-
-absl::string_view FakeConnectionSocket::ja3Hash() const { return ja3_hash_; }
-
 Api::SysCallIntResult FakeConnectionSocket::getSocketOption([[maybe_unused]] int level, int,
                                                             [[maybe_unused]] void* optval,
                                                             socklen_t*) const {
@@ -77,6 +71,19 @@ Api::SysCallIntResult FakeConnectionSocket::getSocketOption([[maybe_unused]] int
 }
 
 absl::optional<std::chrono::milliseconds> FakeConnectionSocket::lastRoundTripTime() { return {}; }
+
+void FakeConnectionSocket::setFingerprint(Network::Fingerprint fingerprint,
+                                          absl::string_view value) {
+  fingerprint_map_[fingerprint] = value;
+}
+
+absl::string_view FakeConnectionSocket::fingerprint(Network::Fingerprint fingerprint) const {
+  if (auto search = fingerprint_map_.find(fingerprint); search != fingerprint_map_.end()) {
+    return (*search).second;
+  }
+
+  return absl::string_view{};
+}
 
 } // namespace ListenerFilters
 } // namespace Extensions
