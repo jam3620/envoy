@@ -93,16 +93,20 @@ public:
 #endif
   }
 
-  struct TestFingerprint {
+  struct TestJA3Fingerprint {
     envoy::extensions::filters::listener::tls_inspector::v3::Fingerprinting cfg_type;
     Network::Fingerprint log_type;
     std::string raw;
     std::string hash;
   };
 
-  void testFingerprints(std::vector<uint8_t>& client_hello,
-                        const std::vector<TestFingerprint>& fingerprints,
-                        bool expect_server_name = true, bool expect_alpn = true);
+  void testJA3Fingerprints(std::vector<uint8_t>& client_hello,
+                           const std::vector<TestJA3Fingerprint>& fingerprints,
+                           bool expect_server_name = true, bool expect_alpn = true);
+
+  void testJA4Fingerprint(std::vector<uint8_t>& client_hello, const absl::string_view fingerprint,
+                          const absl::string_view server_name,
+                          const std::vector<std::string>& alpn);
 
   NiceMock<Api::MockOsSysCalls> os_sys_calls_;
   TestThreadsafeSingletonInjector<Api::OsSysCallsImpl> os_calls_{&os_sys_calls_};
@@ -299,7 +303,7 @@ TEST_P(TlsInspectorTest, ClientHelloTooBig) {
 }
 
 // Test that the filter sets the `JA3` hash
-TEST_P(TlsInspectorTest, ConnectionFingerprint) {
+TEST_P(TlsInspectorTest, ConnectionJA3Fingerprint) {
   envoy::extensions::filters::listener::tls_inspector::v3::TlsInspector proto_config;
   proto_config.mutable_enable_ja3_fingerprinting()->set_value(true);
   cfg_ = std::make_shared<Config>(*store_.rootScope(), proto_config);
@@ -318,9 +322,9 @@ TEST_P(TlsInspectorTest, ConnectionFingerprint) {
   EXPECT_EQ(Network::FilterStatus::Continue, state);
 }
 
-void TlsInspectorTest::testFingerprints(std::vector<uint8_t>& client_hello,
-                                        const std::vector<TestFingerprint>& fingerprints,
-                                        bool expect_server_name, bool expect_alpn) {
+void TlsInspectorTest::testJA3Fingerprints(std::vector<uint8_t>& client_hello,
+                                           const std::vector<TestJA3Fingerprint>& fingerprints,
+                                           bool expect_server_name, bool expect_alpn) {
 
   envoy::extensions::filters::listener::tls_inspector::v3::TlsInspector proto_config;
   for (const auto& fingerprint : fingerprints) {
@@ -375,7 +379,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3Hash) {
   ja3n_raw += "0-10-11-13-16,29-23-24,0";
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHelloFromJA3Fingerprint(ja3_raw);
 
-  const std::vector<TestFingerprint> fingerprints = {
+  const std::vector<TestJA3Fingerprint> fingerprints = {
       {
           envoy::extensions::filters::listener::tls_inspector::v3::JA3,
           Network::Fingerprint::JA3,
@@ -390,7 +394,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3Hash) {
       },
   };
 
-  testFingerprints(client_hello, fingerprints);
+  testJA3Fingerprints(client_hello, fingerprints);
 }
 
 // Test that the filter sets the correct `JA3` and `JA3N` hash with GREASE values in ClientHello
@@ -429,7 +433,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashGREASE) {
   MD5(reinterpret_cast<const uint8_t*>(ja3n_fingerprint.data()), ja3n_fingerprint.size(), buf);
   std::string ja3n_hash = Envoy::Hex::encode(buf, MD5_DIGEST_LENGTH);
 
-  const std::vector<TestFingerprint> fingerprints = {
+  const std::vector<TestJA3Fingerprint> fingerprints = {
       {
           envoy::extensions::filters::listener::tls_inspector::v3::JA3,
           Network::Fingerprint::JA3,
@@ -444,7 +448,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashGREASE) {
       },
   };
 
-  testFingerprints(client_hello, fingerprints, true);
+  testJA3Fingerprints(client_hello, fingerprints, true);
 }
 
 // Test that the filter sets the correct `JA3` and `JA3N` hash with no elliptic curves or elliptic
@@ -456,7 +460,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashNoEllipticCurvesOrPointFormats) {
 
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHelloFromJA3Fingerprint(ja3_raw);
 
-  const std::vector<TestFingerprint> fingerprints = {
+  const std::vector<TestJA3Fingerprint> fingerprints = {
       {
           envoy::extensions::filters::listener::tls_inspector::v3::JA3,
           Network::Fingerprint::JA3,
@@ -471,7 +475,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashNoEllipticCurvesOrPointFormats) {
       },
   };
 
-  testFingerprints(client_hello, fingerprints);
+  testJA3Fingerprints(client_hello, fingerprints);
 }
 
 // Test that the filter sets the correct `JA3` and `JA3N` hash with TLS1.0 and no extensions in
@@ -484,7 +488,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashTls10NoExtensions) {
   std::vector<uint8_t> client_hello =
       Tls::Test::generateClientHelloFromJA3Fingerprint(fingerprint_raw);
 
-  const std::vector<TestFingerprint> fingerprints = {
+  const std::vector<TestJA3Fingerprint> fingerprints = {
       {
           envoy::extensions::filters::listener::tls_inspector::v3::JA3,
           Network::Fingerprint::JA3,
@@ -499,7 +503,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashTls10NoExtensions) {
       },
   };
 
-  testFingerprints(client_hello, fingerprints, false, false);
+  testJA3Fingerprints(client_hello, fingerprints, false, false);
 }
 
 // Test that the filter sets the correct `JA3` and `JA3N` hash with TLS1.1.
@@ -512,7 +516,7 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashTls11) {
 
   std::vector<uint8_t> client_hello = Tls::Test::generateClientHelloFromJA3Fingerprint(ja3_raw);
 
-  const std::vector<TestFingerprint> fingerprints = {
+  const std::vector<TestJA3Fingerprint> fingerprints = {
       {
           envoy::extensions::filters::listener::tls_inspector::v3::JA3,
           Network::Fingerprint::JA3,
@@ -527,7 +531,71 @@ TEST_P(TlsInspectorTest, ConnectionJA3HashTls11) {
       },
   };
 
-  testFingerprints(client_hello, fingerprints);
+  testJA3Fingerprints(client_hello, fingerprints);
+}
+
+void TlsInspectorTest::testJA4Fingerprint(std::vector<uint8_t>& client_hello,
+                                          const absl::string_view fingerprint,
+                                          const absl::string_view server_name,
+                                          const std::vector<std::string>& alpn) {
+
+  envoy::extensions::filters::listener::tls_inspector::v3::TlsInspector proto_config;
+  proto_config.add_fingerprinting(envoy::extensions::filters::listener::tls_inspector::v3::JA4);
+
+  cfg_ = std::make_shared<Config>(*store_.rootScope(), proto_config);
+  init();
+  mockSysCallForPeek(client_hello);
+
+  EXPECT_CALL(socket_, setFingerprint(Network::Fingerprint::JA4, fingerprint));
+
+  if (!server_name.empty()) {
+    EXPECT_CALL(socket_, setRequestedServerName(server_name));
+  }
+  if (!alpn.empty()) {
+    EXPECT_CALL(socket_, requestedApplicationProtocols()).WillOnce(testing::ReturnRef(alpn));
+    EXPECT_CALL(socket_, setRequestedApplicationProtocols(_));
+  } else {
+    EXPECT_CALL(socket_, setRequestedApplicationProtocols(_)).Times(0);
+  }
+
+  if (!fingerprint.empty() && fingerprint[0] == 't') {
+    EXPECT_CALL(socket_, socketType()).WillOnce(testing::Return(Network::Socket::Type::Stream));
+  } else {
+    EXPECT_CALL(socket_, socketType()).WillOnce(testing::Return(Network::Socket::Type::Datagram));
+  }
+
+  // EXPECT_CALL(cb_, continueFilterChain(true));
+  EXPECT_CALL(socket_, setDetectedTransportProtocol(absl::string_view("tls")));
+  EXPECT_CALL(socket_, detectedTransportProtocol()).Times(::testing::AnyNumber());
+  // trigger the event to copy the client hello message into buffer
+  EXPECT_TRUE(file_event_callback_(Event::FileReadyType::Read).ok());
+  auto state = filter_->onData(*buffer_);
+  EXPECT_EQ(Network::FilterStatus::Continue, state);
+}
+
+TEST_P(TlsInspectorTest, ConnectionJA4Hash) {
+  /*
+  std::vector<uint8_t> client_hello = Tls::Test::generateClientHelloFromJA4Fingerprint(
+      "t13d1516h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,"
+      "000a,000b,000d,0012,0017,001b,0023,002b,002d,0033,4469,fe0d,ff01_0403,0804,0401,0503,0805,"
+      "0501,0806,0601");
+  */
+
+  std::vector<uint8_t> client_hello = Tls::Test::generateClientHelloFromJA4Fingerprint(
+      "t13d3112h2_002f,0033,0035,0039,003c,003d,0067,006b,"
+      "009c,009d,009e,009f,00ff,1301,1302,1303,"
+      "c009,c00a,c013,c014,c023,c024,c027,c028,c02b,c02c,"
+      "c02f,c030,cca8,cca9,ccaa_"
+      "000a,000b,000d,0015,0016,0017,002b,002d,0031,0033_0403,0503,0603,0807,0808,0809,080a,080b,"
+      "0804,"
+      "0805,0806,0401,0501,0601,0303,0301,0302,0402,0502,"
+      "0602");
+
+  // testJA4Fingerprint(client_hello, "t13d1516h2_8daaf6152771_02713d6af862", "www.envoyproxy.io",
+  //                    {"h2"});
+
+  testJA4Fingerprint(client_hello, "t13d3112h2_e8f1e7e78f70_b26ce05bbdd6", "www.envoyproxy.io",
+                     {"h2"});
 }
 
 // Test that the filter fails on non-SSL data

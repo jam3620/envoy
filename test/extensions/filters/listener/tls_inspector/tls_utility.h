@@ -26,6 +26,12 @@ std::vector<uint8_t> generateClientHello(uint16_t tls_min_version, uint16_t tls_
  */
 std::vector<uint8_t> generateClientHelloFromJA3Fingerprint(const std::string& ja3_fingerprint);
 
+/**
+ * Generate a TLS ClientHello in wire-format from a `JA4` fingerprint.
+ * @param ja4_fingerprint The `JA4` fingerprint to use when creating the ClientHello message.
+ */
+std::vector<uint8_t> generateClientHelloFromJA4Fingerprint(const std::string& ja4_fingerprint);
+
 } // namespace Test
 } // namespace Tls
 } // namespace Envoy
